@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* PrimeVue component width overrides */
+.p-inputtext,
+.p-calendar {
+  @apply w-full;
+}
+
+/* Input base styles with visible border */
+.p-inputtext,
+.p-dropdown {
+  @apply border border-gray-300 rounded-md;
+}
+
+/* Input focus styles */
+.p-inputtext:focus,
+.p-dropdown:focus,
+.p-calendar .p-inputtext:focus {
+  @apply outline-none ring-2 ring-blue-500 border-blue-500;
+}
+
+/* Custom utility for pre-wrap */
+.whitespace-pre-wrap {
+  white-space: pre-wrap;
+}
