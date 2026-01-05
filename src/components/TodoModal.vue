@@ -105,121 +105,104 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useProjectStore } from '@/stores/projectStore'
-import { useTodoStore } from '@/stores/todoStore'
-import { formatDateTime } from '@/utils/dateFormatters'
-import type { Todo } from '@/models'
+import { ref, computed, watch } from 'vue';
+import { useProjectStore } from '@/stores/projectStore';
+import { useTodoStore } from '@/stores/todoStore';
+import { useEmployeeStore } from '@/stores/employeeStore';
+import { formatDateTime } from '@/utils/dateFormatters';
+import type { Todo } from '@/models';
 
 interface Props {
-  visible: boolean
-  todo?: Todo | null
-  projectId: number
-  isReassigning?: boolean
+  visible: boolean;
+  todo?: Todo | null;
+  projectId: number;
+  isReassigning?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   todo: null,
   isReassigning: false
-})
+});
 
 const emit = defineEmits<{
-  'update:visible': [value: boolean]
-  'saved': [newAssigneeName?: string]
-}>()
+  'update:visible': [value: boolean];
+  'saved': [newAssigneeName?: string];
+}>();
 
-const projectStore = useProjectStore()
-const todoStore = useTodoStore()
+const projectStore = useProjectStore();
+const todoStore = useTodoStore();
+const employeeStore = useEmployeeStore();
 
 const form = ref({
   title: '',
   description: '',
   dueDate: null as Date | null,
   assigneeId: null as number | null
-})
+});
 
-const employees = computed(() => {
-  return todoStore.allEmployees.map(emp => ({
+const employees = computed(() =>
+  employeeStore.employees.map(emp => ({
     id: emp.id,
     fullName: `${emp.firstName} ${emp.lastName}`
   }))
-})
+);
 
-const isEditing = computed(() => !!props.todo && !props.isReassigning)
+const isEditing = computed(() => !!props.todo && !props.isReassigning);
 
-const isSameAssignee = computed(() => {
-  return props.isReassigning && props.todo && form.value.assigneeId === props.todo.currentAssigneeId
-})
+const isSameAssignee = computed(() =>
+  props.isReassigning && props.todo && form.value.assigneeId === props.todo.currentAssigneeId
+);
 
 const isFormValid = computed(() => {
   if (props.isReassigning) {
-    return form.value.assigneeId !== null && !isSameAssignee.value
+    return form.value.assigneeId !== null && !isSameAssignee.value;
   }
-  return form.value.title.trim() !== '' && form.value.assigneeId !== null
-})
+  return form.value.title.trim() !== '' && form.value.assigneeId !== null;
+});
 
-// Get first employee from the project as default assignee for new todos
 const getDefaultAssignee = (): number | null => {
-  const project = projectStore.getProjectById(props.projectId)
-  if (project && project.assignedEmployeeIds.length > 0) {
-    return project.assignedEmployeeIds[0]
+  const project = projectStore.getProjectById(props.projectId);
+  if (project?.assignedEmployeeIds.length) {
+    return project.assignedEmployeeIds[0];
   }
-  return employees.value.length > 0 ? employees.value[0].id : null
-}
+  return employees.value[0]?.id ?? null;
+};
 
-// Reset form when modal opens
-watch(() => props.visible, (newVal) => {
-  if (newVal) {
-    if (props.todo) {
-      form.value = {
-        title: props.todo.title,
-        description: props.todo.description,
-        dueDate: props.todo.dueDate ? new Date(props.todo.dueDate) : null,
-        assigneeId: props.todo.currentAssigneeId
-      }
-    } else {
-      form.value = {
-        title: '',
-        description: '',
-        dueDate: null,
-        assigneeId: getDefaultAssignee()
-      }
-    }
-  }
-})
+const getInitialForm = () => ({
+  title: props.todo?.title ?? '',
+  description: props.todo?.description ?? '',
+  dueDate: props.todo?.dueDate ? new Date(props.todo.dueDate) : null,
+  assigneeId: props.todo?.currentAssigneeId ?? getDefaultAssignee()
+});
 
-const getAssigneeName = (assigneeId: number): string => {
-  const employee = employees.value.find(e => e.id === assigneeId)
-  return employee?.fullName || 'Unknown'
-}
+watch(() => props.visible, (visible) => {
+  if (visible) form.value = getInitialForm();
+});
+
+const getAssigneeName = (assigneeId: number): string =>
+  employees.value.find(e => e.id === assigneeId)?.fullName || 'Unknown';
 
 const handleSubmit = () => {
-  if (!isFormValid.value) return
+  if (!isFormValid.value) return;
 
-  const dueDateStr = form.value.dueDate ? form.value.dueDate.toISOString().split('T')[0] : null
-  let newAssigneeName: string | undefined
-
-  // Get first employee from project as the "creator" for tracking purposes
-  const creatorId = getDefaultAssignee() || form.value.assigneeId!
+  const dueDateStr = form.value.dueDate?.toISOString().split('T')[0] ?? null;
+  const creatorId = getDefaultAssignee() || form.value.assigneeId!;
+  let newAssigneeName: string | undefined;
 
   if (props.isReassigning && props.todo) {
-    // Reassign todo
-    todoStore.reassignTodo(props.todo.id, form.value.assigneeId!, creatorId)
-    newAssigneeName = getAssigneeName(form.value.assigneeId!)
+    todoStore.reassignTodo(props.todo.id, form.value.assigneeId!, creatorId);
+    newAssigneeName = getAssigneeName(form.value.assigneeId!);
   } else if (isEditing.value && props.todo) {
-    // Update existing todo
     todoStore.updateTodo(props.todo.id, {
       title: form.value.title,
       description: form.value.description,
       dueDate: dueDateStr
-    })
-    // If assignee changed, also reassign
+    });
     if (form.value.assigneeId !== props.todo.currentAssigneeId) {
-      todoStore.reassignTodo(props.todo.id, form.value.assigneeId!, creatorId)
-      newAssigneeName = getAssigneeName(form.value.assigneeId!)
+      todoStore.reassignTodo(props.todo.id, form.value.assigneeId!, creatorId);
+      newAssigneeName = getAssigneeName(form.value.assigneeId!);
     }
   } else {
-    // Create new todo
     todoStore.addTodo(
       props.projectId,
       form.value.title,
@@ -227,10 +210,10 @@ const handleSubmit = () => {
       dueDateStr,
       form.value.assigneeId!,
       creatorId
-    )
+    );
   }
 
-  emit('saved', newAssigneeName)
-  emit('update:visible', false)
-}
+  emit('saved', newAssigneeName);
+  emit('update:visible', false);
+};
 </script>

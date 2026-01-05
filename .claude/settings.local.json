@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx vite --version)",
+      "Bash(timeout 5 npx vite:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(npx eslint:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(timeout 5 npm run dev:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(git init:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(tree:*)"
+    ]
+  }
+}

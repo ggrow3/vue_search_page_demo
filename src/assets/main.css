@@ -4,13 +4,22 @@
 
 /* PrimeVue component width overrides */
 .p-inputtext,
-.p-calendar {
+.p-calendar,
+.p-chips,
+.p-autocomplete {
+  @apply w-full;
+}
+
+.p-chips .p-chips-multiple-container,
+.p-autocomplete-multiple-container {
   @apply w-full;
 }
 
 /* Input base styles with visible border */
 .p-inputtext,
-.p-dropdown {
+.p-dropdown,
+.p-chips .p-chips-multiple-container,
+.p-autocomplete-multiple-container {
   @apply border border-gray-300 rounded-md;
 }
 

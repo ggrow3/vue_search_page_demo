@@ -1,58 +1,42 @@
-import { ref, computed } from 'vue'
-import { defineStore } from 'pinia'
-import type { Employee, Todo } from '@/models'
-import { todoService, employeeService } from '@/services'
-
-// Re-export types for convenience
-export type { Todo, TodoAssignment } from '@/models'
+import { ref } from 'vue';
+import { defineStore } from 'pinia';
+import type { Todo } from '@/models';
+import { todoService } from '@/services';
+import { useEmployeeStore } from './employeeStore';
+import { updateItemById, removeItemById } from '@/utils/arrayUtils';
 
 export const useTodoStore = defineStore('todo', () => {
-  // State
-  const todos = ref<Todo[]>([])
-  const employees = ref<Employee[]>([])
-  const isLoading = ref(false)
+  const todos = ref<Todo[]>([]);
+  const isLoading = ref(false);
 
-  // Getters
-  const allEmployees = computed(() => employees.value)
+  const employeeStore = useEmployeeStore();
 
-  const getProjectTodos = (projectId: number): Todo[] => {
-    return todos.value.filter(todo => todo.projectId === projectId)
-  }
+  const getProjectTodos = (projectId: number): Todo[] =>
+    todos.value.filter(todo => todo.projectId === projectId);
 
-  const getEmployeeById = (id: number): Employee | undefined => {
-    return employeeService.getByIdSync(id)
-  }
+  const getEmployeeById = (id: number) => employeeStore.byId(id);
+  const getEmployeeName = (id: number) => employeeStore.getName(id);
 
-  const getEmployeeName = (id: number): string => {
-    return employeeService.getNameSync(id)
-  }
-
-  // Actions
   const initialize = async (): Promise<void> => {
-    isLoading.value = true
+    isLoading.value = true;
     try {
-      const [todoData, employeeData] = await Promise.all([
-        todoService.getAll(),
-        employeeService.getAll()
-      ])
-      todos.value = todoData
-      employees.value = employeeData
+      await employeeStore.initialize();
+      todos.value = await todoService.getAll();
     } finally {
-      isLoading.value = false
+      isLoading.value = false;
     }
-  }
+  };
 
   const loadProjectTodos = async (projectId: number): Promise<void> => {
-    isLoading.value = true
+    isLoading.value = true;
     try {
-      const projectTodos = await todoService.getByProjectId(projectId)
-      // Merge with existing todos, replacing any with same id
-      const otherTodos = todos.value.filter(t => t.projectId !== projectId)
-      todos.value = [...otherTodos, ...projectTodos]
+      const projectTodos = await todoService.getByProjectId(projectId);
+      const otherTodos = todos.value.filter(t => t.projectId !== projectId);
+      todos.value = [...otherTodos, ...projectTodos];
     } finally {
-      isLoading.value = false
+      isLoading.value = false;
     }
-  }
+  };
 
   const addTodo = async (
     projectId: number,
@@ -62,66 +46,45 @@ export const useTodoStore = defineStore('todo', () => {
     assigneeId: number,
     creatorId: number
   ): Promise<Todo> => {
-    const todo = await todoService.create(projectId, title, description, dueDate, assigneeId, creatorId)
-    todos.value.push(todo)
-    return todo
-  }
+    const todo = await todoService.create(projectId, title, description, dueDate, assigneeId, creatorId);
+    todos.value.push(todo);
+    return todo;
+  };
 
   const updateTodo = async (
     todoId: number,
     updates: { title?: string; description?: string; dueDate?: string | null }
-  ): Promise<void> => {
-    const updatedTodo = await todoService.update(todoId, updates)
-    if (updatedTodo) {
-      const index = todos.value.findIndex(t => t.id === todoId)
-      if (index !== -1) {
-        todos.value[index] = updatedTodo
-      }
-    }
-  }
+  ): Promise<boolean> => {
+    const todo = todos.value.find(t => t.id === todoId);
+    if (todo?.completed) return false;
+    const updatedTodo = await todoService.update(todoId, updates);
+    return updateItemById(todos.value, todoId, updatedTodo);
+  };
 
-  const reassignTodo = async (todoId: number, newAssigneeId: number, reassignedById: number): Promise<void> => {
-    const updatedTodo = await todoService.reassign(todoId, newAssigneeId, reassignedById)
-    if (updatedTodo) {
-      const index = todos.value.findIndex(t => t.id === todoId)
-      if (index !== -1) {
-        todos.value[index] = updatedTodo
-      }
-    }
-  }
+  const reassignTodo = async (todoId: number, newAssigneeId: number, reassignedById: number): Promise<boolean> => {
+    const todo = todos.value.find(t => t.id === todoId);
+    if (todo?.completed) return false;
+    const updatedTodo = await todoService.reassign(todoId, newAssigneeId, reassignedById);
+    return updateItemById(todos.value, todoId, updatedTodo);
+  };
 
-  const toggleTodoComplete = async (todoId: number): Promise<void> => {
-    const updatedTodo = await todoService.toggleComplete(todoId)
-    if (updatedTodo) {
-      const index = todos.value.findIndex(t => t.id === todoId)
-      if (index !== -1) {
-        todos.value[index] = updatedTodo
-      }
-    }
-  }
+  const toggleTodoComplete = async (todoId: number): Promise<boolean> => {
+    const updatedTodo = await todoService.toggleComplete(todoId);
+    return updateItemById(todos.value, todoId, updatedTodo);
+  };
 
   const deleteTodo = async (todoId: number): Promise<void> => {
-    const success = await todoService.delete(todoId)
-    if (success) {
-      const index = todos.value.findIndex(t => t.id === todoId)
-      if (index !== -1) {
-        todos.value.splice(index, 1)
-      }
-    }
-  }
+    const success = await todoService.delete(todoId);
+    if (success) removeItemById(todos.value, todoId);
+  };
 
   return {
-    // State
     todos,
     isLoading,
-
-    // Getters
-    allEmployees,
+    allEmployees: employeeStore.employees,
     getProjectTodos,
     getEmployeeById,
     getEmployeeName,
-
-    // Actions
     initialize,
     loadProjectTodos,
     addTodo,
@@ -129,5 +92,5 @@ export const useTodoStore = defineStore('todo', () => {
     reassignTodo,
     toggleTodoComplete,
     deleteTodo
-  }
-})
+  };
+});

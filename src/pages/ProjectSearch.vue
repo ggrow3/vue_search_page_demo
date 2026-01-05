@@ -6,23 +6,26 @@
 
     <form @submit.prevent="performSearch">
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-        <div>
-          <label for="projectCode" class="font-bold block mb-2">Project ID</label>
+        <div @keydown.enter.stop>
+          <label for="projectCodes" class="font-bold block mb-2">Project ID(s)</label>
           <AutoComplete
-            id="projectCode"
-            v-model="searchParams.projectCode"
+            id="projectCodes"
+            v-model="projectCodesModel"
+            :multiple="true"
             :suggestions="projectCodeSuggestions"
-            @complete="searchProjectCodes"
             optionLabel="code"
-            placeholder="e.g. 10234567"
-            class="w-full"
-            inputClass="w-full"
+            placeholder="Type to search project IDs"
+            @complete="searchProjectCodes"
+            @item-select="onProjectCodeSelect"
           >
             <template #option="{ option }">
-              <div class="flex flex-col">
+              <div class="flex justify-between items-center gap-2">
                 <span class="font-semibold">{{ option.code }}</span>
                 <span class="text-gray-500 text-sm">{{ option.name }}</span>
               </div>
+            </template>
+            <template #chip="{ value }">
+              <span>{{ typeof value === 'string' ? value : value.code }}</span>
             </template>
           </AutoComplete>
         </div>
@@ -43,16 +46,17 @@
           />
         </div>
         <div>
-          <label for="status" class="font-bold block mb-2">Status</label>
-          <Dropdown
-            id="status"
-            v-model="searchParams.status"
+          <label for="statuses" class="font-bold block mb-2">Status</label>
+          <MultiSelect
+            id="statuses"
+            v-model="searchParams.statuses"
             :options="statusOptions"
             optionLabel="label"
             optionValue="value"
             placeholder="All Statuses"
             class="w-full"
-            showClear
+            :maxSelectedLabels="2"
+            selectedItemsLabel="{0} statuses"
           />
         </div>
       </div>
@@ -163,37 +167,32 @@
       </template>
 
       <Column expander style="width: 50px" />
-      <Column v-if="isColumnVisible('projectCode')" field="projectCode" header="Project ID" style="width: 120px" sortable />
-      <Column v-if="isColumnVisible('name')" field="name" header="Name" sortable />
-      <Column v-if="isColumnVisible('department')" field="department" header="Department" sortable />
-      <Column v-if="isColumnVisible('status')" field="status" header="Status" style="width: 120px" sortable>
+      <Column v-if="isVisible('projectCode')" field="projectCode" header="Project ID" style="width: 120px" sortable />
+      <Column v-if="isVisible('name')" field="name" header="Name" sortable />
+      <Column v-if="isVisible('department')" field="department" header="Department" sortable />
+      <Column v-if="isVisible('status')" field="status" header="Status" style="width: 120px" sortable>
         <template #body="{ data }">
-          <span
-            class="inline-flex items-center justify-center px-2 py-1 text-xs font-bold rounded-full"
-            :class="getStatusClass(data.status)"
-          >
-            {{ formatStatus(data.status) }}
-          </span>
+          <StatusBadge :status="data.status" />
         </template>
       </Column>
-      <Column v-if="isColumnVisible('startDate')" field="startDate" header="Start Date" style="width: 120px" sortable>
+      <Column v-if="isVisible('startDate')" field="startDate" header="Start Date" style="width: 120px" sortable>
         <template #body="{ data }">
           {{ formatDate(data.startDate) }}
         </template>
       </Column>
-      <Column v-if="isColumnVisible('endDate')" field="endDate" header="End Date" style="width: 120px" sortable>
+      <Column v-if="isVisible('endDate')" field="endDate" header="End Date" style="width: 120px" sortable>
         <template #body="{ data }">
           {{ data.endDate ? formatDate(data.endDate) : '-' }}
         </template>
       </Column>
-      <Column v-if="isColumnVisible('team')" header="Team" style="width: 80px; text-align: center">
+      <Column v-if="isVisible('team')" header="Team" style="width: 80px; text-align: center">
         <template #body="{ data }">
           <span class="text-gray-600">
             {{ data.assignedEmployeeIds.length }}
           </span>
         </template>
       </Column>
-      <Column v-if="isColumnVisible('todos')" header="Todos" style="width: 100px; text-align: center">
+      <Column v-if="isVisible('todos')" header="Todos" style="width: 100px; text-align: center">
         <template #body="{ data }">
           <template v-if="getTodoCounts(data.id).total > 0">
             <span
@@ -220,87 +219,31 @@
       </Column>
 
       <template #expansion="{ data }">
-        <div class="p-4 bg-gray-50">
-          <div class="mb-3">
-            <h4 class="text-gray-700 font-semibold mb-2">
-              <i class="pi pi-info-circle mr-2"></i>Description
-            </h4>
-            <p class="text-gray-600 text-sm">{{ data.description }}</p>
-          </div>
-
-          <div class="mb-3">
-            <h4 class="text-gray-700 font-semibold mb-2">
-              <i class="pi pi-users mr-2"></i>Assigned Team Members
-            </h4>
-            <div v-if="getProjectEmployees(data.id).length === 0" class="text-gray-500 text-sm">
-              No employees assigned to this project.
-            </div>
-            <div v-else class="flex flex-wrap gap-2">
-              <span
-                v-for="emp in getProjectEmployees(data.id)"
-                :key="emp.id"
-                class="bg-primary-100 text-primary-800 text-xs px-2 py-1 rounded-full"
-              >
-                {{ emp.firstName }} {{ emp.lastName }}
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <h4 class="text-gray-700 font-semibold mb-2">
-              <i class="pi pi-check-square mr-2"></i>Todos
-            </h4>
-            <div v-if="getProjectTodos(data.id).length === 0" class="text-gray-500 text-sm">
-              No todos for this project.
-            </div>
-            <div v-else class="flex flex-col gap-2">
-              <div
-                v-for="todo in getProjectTodos(data.id)"
-                :key="todo.id"
-                class="flex items-center gap-3 p-2 bg-white rounded border border-gray-200"
-                :class="{ 'opacity-60': todo.completed }"
-              >
-                <Checkbox
-                  :modelValue="todo.completed"
-                  @update:modelValue="toggleTodoComplete(todo.id)"
-                  :binary="true"
-                  :aria-label="todo.completed ? 'Mark as incomplete' : 'Mark as complete'"
-                />
-                <div class="flex-1">
-                  <span :class="{ 'line-through': todo.completed }">{{ todo.title }}</span>
-                  <span class="text-gray-500 text-xs ml-2">
-                    ({{ todo.currentAssigneeName }})
-                  </span>
-                  <span v-if="todo.dueDate" class="text-gray-500 text-xs ml-2">
-                    Due: {{ formatDate(todo.dueDate) }}
-                  </span>
-                </div>
-                <span
-                  v-if="todo.completed"
-                  class="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full"
-                >
-                  Done
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ProjectExpansionPanel
+          :project="data"
+          :employees="store.getProjectEmployees(data.id)"
+          :todos="todoStore.getProjectTodos(data.id)"
+          @toggle-todo="todoStore.toggleTodoComplete"
+        />
       </template>
     </DataTable>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { useProjectSearch } from '@/composables/useProjectSearch'
-import { useProjectStore } from '@/stores/projectStore'
-import { useTodoStore } from '@/stores/todoStore'
-import type { Todo, Employee } from '@/models'
+import { ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
+import { useProjectSearch } from '@/composables/useProjectSearch';
+import { usePersistedColumns } from '@/composables/usePersistedColumns';
+import { useProjectStore } from '@/stores/projectStore';
+import { useTodoStore } from '@/stores/todoStore';
+import { statusOptions } from '@/utils/statusUtils';
+import StatusBadge from '@/components/StatusBadge.vue';
+import ProjectExpansionPanel from '@/components/ProjectExpansionPanel.vue';
 
-const router = useRouter()
-const store = useProjectStore()
-const todoStore = useTodoStore()
+const router = useRouter();
+const store = useProjectStore();
+const todoStore = useTodoStore();
 
 const {
   searchParams,
@@ -313,20 +256,35 @@ const {
   performSearch,
   clearSearch,
   formatDate
-} = useProjectSearch()
+} = useProjectSearch();
 
-const expandedRows = ref<Record<number, boolean>>({})
+// Project code autocomplete
+type ProjectCodeOption = { code: string; name: string };
+const projectCodeSuggestions = ref<ProjectCodeOption[]>([]);
 
-// Column selection
-interface ColumnOption {
-  field: string
-  header: string
-  icon: string
-}
+const searchProjectCodes = (event: { query: string }) => {
+  projectCodeSuggestions.value = store.getProjectCodeSuggestions(event.query);
+};
 
-const STORAGE_KEY = 'projectSearch_selectedColumns'
+// Computed with getter/setter - converts between objects and strings for store
+const projectCodesModel = computed({
+  get: () => {
+    return store.searchParams.projectCodes.map(code => ({ code, name: '' }));
+  },
+  set: (value: (string | ProjectCodeOption)[]) => {
+    store.searchParams.projectCodes = value.map(v =>
+      typeof v === 'string' ? v : v.code
+    );
+  }
+});
 
-const columnOptions: ColumnOption[] = [
+const onProjectCodeSelect = () => {
+  // Selection handled by v-model, this is for any additional logic if needed
+};
+
+const expandedRows = ref<Record<number, boolean>>({});
+
+const columnOptions = [
   { field: 'projectCode', header: 'Project ID', icon: 'pi pi-hashtag' },
   { field: 'name', header: 'Name', icon: 'pi pi-tag' },
   { field: 'department', header: 'Department', icon: 'pi pi-building' },
@@ -335,115 +293,30 @@ const columnOptions: ColumnOption[] = [
   { field: 'endDate', header: 'End Date', icon: 'pi pi-calendar-times' },
   { field: 'team', header: 'Team', icon: 'pi pi-users' },
   { field: 'todos', header: 'Todos', icon: 'pi pi-check-square' }
-]
+];
 
-// Load saved columns from localStorage or default to all columns
-const loadSavedColumns = (): ColumnOption[] => {
-  const saved = localStorage.getItem(STORAGE_KEY)
-  if (saved) {
-    try {
-      const savedFields: string[] = JSON.parse(saved)
-      const columns = columnOptions.filter(col => savedFields.includes(col.field))
-      return columns.length > 0 ? columns : [...columnOptions]
-    } catch {
-      return [...columnOptions]
-    }
-  }
-  return [...columnOptions]
-}
+const { selectedColumns, isVisible } = usePersistedColumns(columnOptions, 'projectSearch_selectedColumns');
 
-const selectedColumns = ref<ColumnOption[]>(loadSavedColumns())
-
-// Save to localStorage when columns change
-watch(selectedColumns, (newColumns) => {
-  const fields = newColumns.map(col => col.field)
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(fields))
-}, { deep: true })
-
-const isColumnVisible = (field: string): boolean => {
-  return selectedColumns.value.some(col => col.field === field)
-}
-
-// Autocomplete for project code
-const projectCodeSuggestions = ref<{ code: string; name: string }[]>([])
-
-const searchProjectCodes = (event: { query: string }) => {
-  projectCodeSuggestions.value = store.getProjectCodeSuggestions(event.query)
-}
-
-// When user selects from autocomplete, extract just the code string
-watch(() => searchParams.value.projectCode, (newValue) => {
-  if (typeof newValue === 'object' && newValue !== null && 'code' in newValue) {
-    searchParams.value.projectCode = (newValue as { code: string }).code
-  }
-})
-
-const statusOptions = [
-  { label: 'Active', value: 'active' },
-  { label: 'On Hold', value: 'on-hold' },
-  { label: 'Completed', value: 'completed' }
-]
-
-const getStatusClass = (status: string): string => {
-  switch (status) {
-    case 'active':
-      return 'bg-green-100 text-green-800'
-    case 'on-hold':
-      return 'bg-yellow-100 text-yellow-800'
-    case 'completed':
-      return 'bg-blue-100 text-blue-800'
-    default:
-      return 'bg-gray-100 text-gray-800'
-  }
-}
-
-const formatStatus = (status: string): string => {
-  switch (status) {
-    case 'active':
-      return 'Active'
-    case 'on-hold':
-      return 'On Hold'
-    case 'completed':
-      return 'Completed'
-    default:
-      return status
-  }
-}
-
-const getProjectTodos = (projectId: number): Todo[] => {
-  return todoStore.getProjectTodos(projectId)
-}
-
-const getProjectEmployees = (projectId: number): Employee[] => {
-  return store.getProjectEmployees(projectId)
-}
-
-// Pre-compute todo counts for all projects to avoid repeated filtering
 const todoCounts = computed(() => {
-  const counts: Record<number, { total: number; pending: number }> = {}
+  const counts: Record<number, { total: number; pending: number }> = {};
   for (const todo of todoStore.todos) {
     if (!counts[todo.projectId]) {
-      counts[todo.projectId] = { total: 0, pending: 0 }
+      counts[todo.projectId] = { total: 0, pending: 0 };
     }
-    counts[todo.projectId].total++
+    counts[todo.projectId].total++;
     if (!todo.completed) {
-      counts[todo.projectId].pending++
+      counts[todo.projectId].pending++;
     }
   }
-  return counts
-})
+  return counts;
+});
 
-const getTodoCounts = (projectId: number): { total: number; pending: number } => {
-  return todoCounts.value[projectId] || { total: 0, pending: 0 }
-}
-
-const toggleTodoComplete = (todoId: number) => {
-  todoStore.toggleTodoComplete(todoId)
-}
+const getTodoCounts = (projectId: number) =>
+  todoCounts.value[projectId] || { total: 0, pending: 0 };
 
 const viewProject = (id: number) => {
-  router.push({ name: 'project-profile', params: { id: String(id) } })
-}
+  router.push({ name: 'project-profile', params: { id: String(id) } });
+};
 </script>
 
 <style scoped>

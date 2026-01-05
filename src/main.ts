@@ -14,6 +14,7 @@ import 'primeicons/primeicons.css'
 
 // PrimeVue components
 import AutoComplete from 'primevue/autocomplete'
+import Chips from 'primevue/chips'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import InputText from 'primevue/inputtext'
@@ -39,6 +40,7 @@ app.use(ToastService)
 
 // Register components globally
 app.component('AutoComplete', AutoComplete)
+app.component('Chips', Chips)
 app.component('DataTable', DataTable)
 app.component('Column', Column)
 app.component('InputText', InputText)
