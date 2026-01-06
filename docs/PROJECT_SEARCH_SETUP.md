@@ -251,6 +251,8 @@ Query string takes precedence over the config file setting.
 
 The services use a dependency injection pattern to cleanly separate mock and API implementations.
 
+> **Detailed Guide:** See [SERVICE_PROVIDER_GUIDE.md](./SERVICE_PROVIDER_GUIDE.md) for complete documentation on the service provider, mock configuration, and architecture diagrams.
+
 ### How It Works
 
 1. **Interfaces** (`src/services/interfaces/`) define the contract each service must fulfill
