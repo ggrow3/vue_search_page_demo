@@ -51,11 +51,26 @@ src/stores/
 └── employeeStore.ts             # Employee state management
 ```
 
-### 5. Services
+### 5. Services (Dependency Injection Architecture)
 ```
 src/services/
-├── projectService.ts            # Project & Employee API/mock service
-├── todoService.ts               # Todo API/mock service
+├── interfaces/                  # Service contracts
+│   ├── IProjectService.ts
+│   ├── IEmployeeService.ts
+│   ├── ITodoService.ts
+│   ├── INoteService.ts
+│   └── index.ts
+├── mock/                        # Mock implementations
+│   ├── mockProjectService.ts
+│   ├── mockEmployeeService.ts
+│   ├── mockTodoService.ts
+│   └── mockNoteService.ts
+├── api/                         # API implementations
+│   ├── apiProjectService.ts
+│   ├── apiEmployeeService.ts
+│   ├── apiTodoService.ts
+│   └── apiNoteService.ts
+├── serviceProvider.ts           # DI - injects correct implementation
 ├── httpClient.ts                # Axios wrapper
 └── index.ts                     # Service exports
 ```
@@ -218,12 +233,95 @@ module.exports = {
 
 ### Step 6: Configure Data Source
 
-Edit `src/config/dataSource.ts` to toggle between mock and API modes:
+Edit `src/config/dataSource.ts` to set the default mode:
 
 ```typescript
-// Set to 'mock' for development, 'api' for production
-export const DATA_SOURCE: 'mock' | 'api' = 'mock';
+// Default is 'api' - change to 'mock' for local development without backend
+export const DATA_SOURCE: 'mock' | 'api' = 'api';
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+```
+
+You can also override the mode at runtime using URL query strings:
+- `?mock` or `?mock=true` - Force mock mode
+- `?mock=false` or `?api` - Force API mode
+
+Query string takes precedence over the config file setting.
+
+## Service Architecture (Dependency Injection)
+
+The services use a dependency injection pattern to cleanly separate mock and API implementations.
+
+### How It Works
+
+1. **Interfaces** (`src/services/interfaces/`) define the contract each service must fulfill
+2. **Mock implementations** (`src/services/mock/`) use in-memory data with simulated delays
+3. **API implementations** (`src/services/api/`) make real HTTP requests via `httpClient`
+4. **Service Provider** (`src/services/serviceProvider.ts`) injects the correct implementation based on:
+   - URL query string (`?mock` or `?api`) - checked first
+   - `DATA_SOURCE` config - fallback (default: `api`)
+
+### Usage
+
+Import services from `@/services` - the correct implementation is automatically injected:
+
+```typescript
+import { projectService, todoService, employeeService, noteService } from '@/services';
+
+// Works the same in both mock and API mode
+const projects = await projectService.getAll();
+const todos = await todoService.getByProjectId(1);
+```
+
+### Switching Between Mock and API
+
+**Option 1: URL Query String (runtime override)**
+
+Add a query parameter to the URL - no code changes needed:
+
+```
+http://localhost:5173/?mock        # Mock mode
+http://localhost:5173/?mock=true   # Mock mode
+http://localhost:5173/?mock=false  # API mode
+http://localhost:5173/?api         # API mode
+```
+
+**Option 2: Config File (default is API mode)**
+
+Change `DATA_SOURCE` in `src/config/dataSource.ts`:
+
+```typescript
+// API mode (default) - makes real HTTP requests
+export const DATA_SOURCE = 'api' as DataSourceType;
+
+// Mock mode - uses in-memory data, no backend required
+export const DATA_SOURCE = 'mock' as DataSourceType;
+```
+
+Query string takes precedence over config file.
+
+### Adding a New Service
+
+See [CREATING_SERVICES.md](./CREATING_SERVICES.md) for a complete step-by-step guide with examples.
+
+Quick overview:
+1. Define model in `src/models/`
+2. Create interface in `src/services/interfaces/`
+3. Add mock data in `src/mocks/`
+4. Create mock implementation in `src/services/mock/`
+5. Create API implementation in `src/services/api/`
+6. Register in `src/services/serviceProvider.ts`
+7. Export from `src/services/index.ts`
+
+### Resetting Mock Data
+
+Mock services that maintain mutable state provide a `resetMockData()` method:
+
+```typescript
+import { noteService, todoService } from '@/services';
+
+// Reset to initial mock data (useful for testing)
+noteService.resetMockData?.();
+todoService.resetMockData?.();
 ```
 
 ## API Integration
@@ -254,21 +352,20 @@ ProjectSearch.vue
 ├── projectStore.ts
 │   ├── pinia (defineStore)
 │   ├── employeeStore.ts
-│   ├── projectService.ts
-│   │   ├── httpClient.ts (axios)
-│   │   ├── config (isMockMode)
-│   │   ├── mocks (PROJECTS_DB, EMPLOYEES_DB)
-│   │   └── mockUtils.ts
+│   ├── services/index.ts (projectService, employeeService)
+│   │   └── serviceProvider.ts
+│   │       ├── config (isMockMode) ─── determines which impl to use
+│   │       ├── mock/mockProjectService.ts
+│   │       │   ├── mocks (PROJECTS_DB)
+│   │       │   └── mockUtils.ts (delay)
+│   │       └── api/apiProjectService.ts
+│   │           └── httpClient.ts (axios)
 │   └── models (Project, SearchParams)
 ├── todoStore.ts
 │   ├── pinia (defineStore)
 │   ├── employeeStore.ts
-│   ├── todoService.ts
-│   │   ├── httpClient.ts (axios)
-│   │   ├── config (isMockMode)
-│   │   ├── mocks (TODOS_DB)
-│   │   ├── projectService.ts (employeeService)
-│   │   └── mockUtils.ts
+│   ├── services/index.ts (todoService)
+│   │   └── serviceProvider.ts (same pattern as above)
 │   ├── arrayUtils.ts
 │   └── models (Todo)
 ├── statusUtils.ts
@@ -278,6 +375,14 @@ ProjectSearch.vue
 └── ProjectExpansionPanel.vue
     ├── dateFormatters.ts
     └── models (Project, Employee, Todo)
+
+Service Layer Architecture:
+──────────────────────────
+services/index.ts
+└── serviceProvider.ts
+    ├── isMockMode() ─── checks DATA_SOURCE config
+    ├── mock/* ─── mock implementations (in-memory + delay)
+    └── api/* ─── API implementations (httpClient)
 ```
 
 ## Customization
